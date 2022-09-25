@@ -1,2 +1,7 @@
 # ld19-a7-interface
-RX Interface for LD19 -> Cmod A7
+Interface for receiving data from LD19 over UART. Implemented on Cmod A7-35T.
+
+Things to do:
+- [ ] Check the baud rate is actually correct
+- [ ] Decode the packets
+- [ ] Output to ILI9341
