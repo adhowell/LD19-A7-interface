@@ -63,15 +63,15 @@ module uart_rx ( clk, rx_data, data_out, ready, error );
         if (|rx_buffer[7:0] == 0)
         begin
             ready <= 1'b1;
-            state <= WAIT;
-            data_out <= rx_buffer[7:0];
+            data_out[7:0] <= 8'bx;
+            error <= 1'b1;
+            state <= RDY;
         end
         else
         begin
             ready <= 1'b1;
-            data_out[7:0] <= 8'bx;
-            error <= 1'b1;
-            state <= RDY;
+            state <= WAIT;
+            data_out <= rx_buffer[7:0];
         end
     endcase
 endmodule
