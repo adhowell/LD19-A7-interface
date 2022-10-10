@@ -1,14 +1,21 @@
 `timescale 1ns / 1ps
 
-module uart_rx ( clk, rx_data, data_out, ready, error );
+module uart_rx ( clk, rx_data, data_out, ready, error, recog );
     input clk;
     input rx_data;
     output reg [7:0] data_out;
     output reg ready = 0;
     output reg error = 0;
+    
+    output [1:0] recog;
         
-    localparam RDY = 3'b000, START = 3'b001, RECEIVE=3'b010, WAIT=3'b011, CHECK=3'b100;
-    reg [2:0] state = RDY;
+    localparam INIT = 2'b00, INIT_HIGH = 2'b10, START_TX = 2'b11;
+    reg [1:0] init_state = INIT;
+        
+    assign recog = init_state;
+        
+    localparam NULL = 3'b000, RDY = 3'b001, START = 3'b010, RECEIVE=3'b011, WAIT=3'b100, CHECK=3'b101;
+    reg [2:0] state = NULL;
     
     // Based on 12MHz clock and target baud of 230400
     // Gives error rate of 0.16% - too much???
@@ -19,6 +26,21 @@ module uart_rx ( clk, rx_data, data_out, ready, error );
     reg [8:0] rx_buffer;
     
     always @ (posedge clk)
+    begin
+    
+    case (init_state)
+    INIT:
+        if (rx_data == 1'b1)
+        begin
+            init_state <= INIT_HIGH;
+        end
+    INIT_HIGH:
+        if (rx_data == 1'b0)
+        begin
+            init_state <= START_TX;
+            state <= RDY;
+        end
+    endcase
     
     case (state)
     RDY:
@@ -74,24 +96,30 @@ module uart_rx ( clk, rx_data, data_out, ready, error );
             data_out <= rx_buffer[7:0];
         end
     endcase
+    
+    end
 endmodule
 
-module ld19_rx_top( uart_rx, sysclk, led, led0_r );
+module ld19_rx_top( uart_rx, sysclk, led, led0_r, led0_g, led0_b );
     input uart_rx;
     input sysclk;
     output [1:0] led;
     output led0_r;
+    output led0_g;
+    output led0_b;
     
     wire [7:0] data_out_buffer;
     wire ready;
     wire error;
+    wire [1:0] init_complete;
     
     uart_rx uart_mod (
         .clk(sysclk),
         .rx_data(uart_rx),
         .data_out(data_out_buffer),
         .ready(ready),
-        .error(error)
+        .error(error),
+        .recog(init_complete)
     );
     
     // For baud rate of 230400 and packet size of 8+1 bits
@@ -139,8 +167,13 @@ module ld19_rx_top( uart_rx, sysclk, led, led0_r );
     
     end 
     
-    assign led[1] = led_state[1];
-    assign led[0] = led_state[0];
-    assign led0_r = one_second_indicator;
+    //assign led[1] = led_state[1];
+    //assign led[0] = led_state[0];
+    //assign led0_r = one_second_indicator;
+    assign led0_r = ready;
+    assign led0_g = 1'b1;
+    assign led0_b = 1'b1;
+    assign led[1] = init_complete[1];
+    assign led[0] = init_complete[0];
     
 endmodule
