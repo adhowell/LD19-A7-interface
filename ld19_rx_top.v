@@ -80,16 +80,6 @@ module uart_rx ( clk, rx_data, data_out, ready, error, recog );
                 state <= WAIT;
         end
     CHECK:
-        // Assuming non-null packets are valid
-        // Pretty dumb but can't think of anything better until I add stuff for decoding the packet data
-        if (|rx_buffer[7:0] == 0)
-        begin
-            ready <= 1'b1;
-            data_out[7:0] <= 8'bx;
-            error <= 1'b1;
-            state <= RDY;
-        end
-        else
         begin
             ready <= 1'b1;
             state <= WAIT;
@@ -122,8 +112,11 @@ module ld19_rx_top( uart_rx, sysclk, led, led0_r, led0_g, led0_b );
         .recog(init_complete)
     );
     
-    // For baud rate of 230400 and packet size of 8+1 bits
-    localparam [31:0] one_second_packets = 25600;
+    // Packet size is 300 bytes according to SDK
+    localparam [31:0] packet_size = 300;
+    localparam [31:0] one_second_packets = 5; //801;
+    localparam [7:0] header = 8'b01010100;
+    reg [31:0] packet_byte = 32'b0;
     reg [31:0] packets = 32'b0;
     reg [31:0] sum_errors = 32'b0;
     reg [1:0] led_state = 2'b0;
@@ -135,15 +128,15 @@ module ld19_rx_top( uart_rx, sysclk, led, led0_r, led0_g, led0_b );
     
     if (packets == one_second_packets)
     begin
-        if (sum_errors > 1000)
+        if (sum_errors > 4)
             led_state <= 2'b11;
         else 
         begin
-            if (sum_errors > 100)
+            if (sum_errors > 2)
                 led_state <= 2'b10;
             else 
             begin 
-                if (sum_errors > 10)
+                if (sum_errors > 0)
                     led_state <= 2'b01;
                 else
                     led_state <= 2'b00;
@@ -152,28 +145,44 @@ module ld19_rx_top( uart_rx, sysclk, led, led0_r, led0_g, led0_b );
         reset <= 1'b1;
     end
     else
-        sum_errors <= sum_errors + error;
+    begin
+        if (packet_byte == packet_size)
+        begin
+            packets <= packets + 1'b1;
+            packet_byte <= 32'b0;
+        end
+        else
+        begin
+            if (packet_byte == 32'b0)
+            begin
+                packet_byte <= packet_byte + 1;
+                if ((data_out_buffer ^ header) != 8'b0)
+                    sum_errors <= sum_errors + 1;
+            end
+            else
+                packet_byte <= packet_byte + 1;
+        end
+    end 
     
     if (reset == 1'b1)
     begin
         sum_errors <= 32'b0;
         packets <= 32'b0;
+        packet_byte <= 32'b0;
         reset <= 1'b0;
         led_state <= 2'b00;
         one_second_indicator <= ~one_second_indicator;
     end
-    
-    packets = packets + 1'b1;
-    
+
     end 
     
     //assign led[1] = led_state[1];
     //assign led[0] = led_state[0];
     //assign led0_r = one_second_indicator;
-    assign led0_r = ready;
+    assign led0_r = one_second_indicator;
     assign led0_g = 1'b1;
     assign led0_b = 1'b1;
-    assign led[1] = init_complete[1];
-    assign led[0] = init_complete[0];
+    assign led[1] = led_state[1];
+    assign led[0] = led_state[0];
     
 endmodule
